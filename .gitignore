@@ -1,0 +1,47 @@
+# Python and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Credentials and machine-specific data (never publish)
+.env
+.env.*
+!.env.example
+secrets/
+*.dpapi
+*.pem
+*.key
+auth.json
+config.toml
+settings.json
+worker-settings.json
+*.sqlite
+*.sqlite3
+*.db
+*.db-*
+*.sqlite-*
+*.sqlite3-*
+*.bak
+*.log
+
+# User requests/results may contain private source material
+local/
+runtime/
+requests/
+results/
+*.pending
+
+# Build outputs
+build/
+dist/
+*.zip
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
