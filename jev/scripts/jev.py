@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "_vendor"))
 from jev_core import (JevClient, JevError, Settings, build_payload,
                       encode_json, save_key, strict_json)
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 MAX_FILE_BYTES = 4 * 1024 * 1024
 
 
@@ -28,7 +28,13 @@ def selected_home() -> tuple[Path, str]:
         value = os.environ.get(key)
         if value:
             return Path(value).expanduser().resolve(), key
-    base = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
+    # Do not eagerly look up the OS home when CODEX_HOME is explicit.
+    # Windows may lack USERPROFILE in a deliberately minimal environment.
+    configured_base = os.environ.get("CODEX_HOME")
+    try:
+        base = (Path(configured_base) if configured_base else Path.home() / ".codex").expanduser()
+    except RuntimeError as exc:
+        raise JevError("home_directory_unavailable", "Cannot determine local storage. Configure CODEX_HOME or JEV_SKILL_HOME locally.") from exc
     known = [base / "tools" / "jev-worker", base / "tools" / "jev-helper"]
     # If a chosen credential/config is broken, report it; never change accounts
     # or homes merely because a request failed or a cap was reached.
