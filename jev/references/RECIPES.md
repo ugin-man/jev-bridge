@@ -1,31 +1,19 @@
-# 自然文からの組み立て例
+# Reusable patterns
 
-下の想定結果はテストを設計するための期待値であり、Jevの実測回答ではない。
+Examples are not a list of supported industries. Keep the user's task and stack.
 
-## 初回：「赤いマグカップで試して」
+- Compare related records together; separate mismatches from missing evidence.
+- Ask independent verification questions together; use Noul per independently
+  applicable label rather than forcing multi-label data into one Choice.
+- Rank items with comparable Score questions, retaining raw dimensions for changes
+  in weights without rerunning the model.
+- Build candidates from observed values/spans/actions, then let Choice select one.
+  Do not invent missing candidate values or treat a selection as action permission.
+- Route uncertain or unsupported situations only when the user's workflow calls for
+  that; do not apply a global confidence cutoff to every harmless choice.
 
-assets/smoke.jsonを使う。「赤いマグカップ。持ち手にひびがあります。」という材料に、色と破損記述の有無を独立に尋ねる。期待は色が赤、破損の明記あり。本物の応答が得られたときだけ「実行済み」と返す。
+Assets include a smoke request, product-pair comparison, and reusable support
+questions/data. Their language and domain do not constrain new requests.
 
-## 「この2つ、同じ商品？」
-
-assets/product-pair.jsonを参考に、A/Bの実際の説明を入れる。型番・色・数量・セット内容を分けて確認する。売価が違うだけで別商品としない。欠品・色違い・世代違いを「同じ」に混ぜない。情報が欠けたところは「情報不足」。総合判定を作るなら各項目の実応答に基づき、理由をJevが自由に説明したとはしない。
-
-全体の「一致」を付ける範囲は利用者の目的に沿わせる。メーカー製品として同じかと、付属品・状態まで同じ出品かは別。金銭判断に直結する大きな曖昧さは日本語で一度確認する。
-
-## 「この問い合わせ、種類別に分けて」
-
-ユーザー指定の分類を優先する。指定がなく通常の仕分けなら、内容に合わせた重複の少ない分類案を短く述べ、その他・情報不足を含める。各問い合わせは独立したstateにする。メールアドレス・住所・氏名が分類に不要なら除く。
-件数をLLMが暗算せず、実応答のラベルからプログラムで集計する。一般的な例としてassets/support-recipe.jsonとassets/support-data.jsonがある。
-
-## 「文章の丁寧さを5段階で見て」
-
-5段階をそれぞれ具体的に記述してScoreを使う。0〜4の値を返すので、利用者向けに1〜5へ換算するなら `表示値 = score + 1` とし、端数を勝手に消さない。存在しない丁寧さの客観的正解率を説明しない。十分な文章がないときは情報不足を別のChoiceで判定するか追加の材料を求め、0点扱いしない。
-
-## 「同じ条件で、次の20件も」
-
-既存レシピのquestionsをそのまま再利用する。変更するのはid付きstateの一覧のみ。スクリプトの --recipe と --data で処理し、毎件の途中でホストLLMに問いを作り直させない。前の結果の実行済みidと重複しないか確認する。
-レシピ形式はname（任意）とquestionsのみ。元資料・APIキー・実行許可はレシピに入れない。入力データはstateまたはitemsだけ。通常の料金以外の特別なバッチ割引を主張しない。
-
-## 誤って起動しない例
-
-「小説を書いて」はホストLLMの仕事。「このURLを開いて」だけではJevを呼ばない。「この数字を合計」はローカル計算。「Jevで文章を書いて」は、文章はLLM、内容の分類やチェックはJev、と分けて説明する。利用者がJevのAPIを望んでいない普通の依頼を勝手に外部送信しない。
+For a new task, consult the official TypeSafe skill and closest live cookbook.
+Question design is part of the host's reasoning, not a required form for the user.

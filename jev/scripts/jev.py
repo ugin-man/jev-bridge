@@ -18,43 +18,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "_vendor"))
 from jev_core import (JevClient, JevError, Settings, build_payload,
                       encode_json, save_key, strict_json)
 
-VERSION = "1.0.1"
-MAX_FILE_BYTES = 4 * 1024 * 1024
+VERSION = "2.0.0"
 
 
 def selected_home() -> tuple[Path, str]:
-    """Reuse only known storage locations, not code imported from a project."""
-    for key in ("JEV_SKILL_HOME", "JEV_WORKER_HOME", "JEV_HELPER_HOME"):
-        value = os.environ.get(key)
-        if value:
-            return Path(value).expanduser().resolve(), key
-    # Do not eagerly look up the OS home when CODEX_HOME is explicit.
-    # Windows may lack USERPROFILE in a deliberately minimal environment.
-    configured_base = os.environ.get("CODEX_HOME")
+    from bridge_support import storage_home
     try:
-        base = (Path(configured_base) if configured_base else Path.home() / ".codex").expanduser()
-    except RuntimeError as exc:
-        raise JevError("home_directory_unavailable", "Cannot determine local storage. Configure CODEX_HOME or JEV_SKILL_HOME locally.") from exc
-    known = [base / "tools" / "jev-worker", base / "tools" / "jev-helper"]
-    # If a chosen credential/config is broken, report it; never change accounts
-    # or homes merely because a request failed or a cap was reached.
-    for home in known:
-        if (home / "secrets" / "api-key.dpapi").is_file():
-            return home.resolve(), "existing_encrypted_key"
-    for home in known:
-        if home.is_dir():
-            return home.resolve(), "existing_tool_storage"
-    return (base / "tools" / "jev-skill").resolve(), "skill_storage"
+        return storage_home()
+    except (RuntimeError, OSError, ValueError) as exc:
+        raise JevError("home_directory_unavailable", "Cannot determine storage. Configure JEV_BRIDGE_HOME locally.") from exc
 
 
 def read_json_file(filename: str) -> Any:
-    path = Path(filename).expanduser()
-    if not path.is_file():
-        raise JevError("input_file_missing", "The agent must create the requested input file first.")
-    with path.open("rb") as f:
-        content = f.read(MAX_FILE_BYTES + 1)
-    if len(content) > MAX_FILE_BYTES:
-        raise JevError("file_too_large", "Input exceeds 4 MiB. Split into explicitly bounded groups.")
+    limit = Settings.load(selected_home()[0]).max_input_file_bytes
+    if filename == "-":
+        content = sys.stdin.buffer.read(limit + 1)
+    else:
+        path = Path(filename).expanduser()
+        if not path.is_file():
+            raise JevError("input_file_missing", "The agent must create the requested input file first.")
+        with path.open("rb") as f:
+            content = f.read(limit + 1)
+    if len(content) > limit:
+        raise JevError("file_too_large", "Input exceeds configured max_input_file_bytes. Review settings or split the input.")
     try:
         return strict_json(content.decode("utf-8-sig"))
     except (ValueError, UnicodeError, RecursionError) as exc:
@@ -133,13 +119,11 @@ def print_json(result: dict) -> None:
 
 
 def set_local_key(home: Path) -> dict:
-    if os.name != "nt":
-        raise JevError("windows_required", "Use the process environment outside Windows. Never put a key in chat or command arguments.")
     if not sys.stdin.isatty():
-        raise JevError("interactive_required", "Open SET-KEY.cmd in a local interactive Windows terminal.")
+        raise JevError("interactive_required", "Run set-key in a local interactive terminal.")
     print("TypeSafe key storage only. NO API request. Input is hidden.")
     print("Storage: " + str(home))
-    if (home / "secrets" / "api-key.dpapi").exists():
+    if any((home / "secrets" / name).exists() for name in ("api-key.dpapi", "keyring.json")):
         if input("An encrypted key already exists. Replace it? [y/N]: ").strip().lower() != "y":
             return {"ok": True, "cancelled": True, "network_called": False}
     # Do not accept a getpass fallback that would echo the credential.

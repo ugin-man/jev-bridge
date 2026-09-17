@@ -1,25 +1,38 @@
-# 参照仕様と同梱コード
+# Research and design record — 2026-09-17
 
-元パッケージの仕様確認日：2026-09-17。
+Inspected primary sources, not a list of unverified search matches:
 
-- OpenAI公式スキル形式・探索先：https://developers.openai.com/codex/skills/
-- OpenAI公式スキル案内：https://learn.chatgpt.com/docs/build-skills
-- TypeSafe API：https://docs.typesafe.ai/api
-- Choice：https://docs.typesafe.ai/primitives/choice
-- Score：https://docs.typesafe.ai/primitives/score
-- Noul：https://docs.typesafe.ai/primitives/noul
-- TypeSafeのエージェントスキル案内：https://docs.typesafe.ai/agent-skill
+| Source | What was actually adopted |
+| --- | --- |
+| https://github.com/typesafe-ai/skills/blob/main/skills/typesafe-ai/SKILL.md | Start from desired behavior, preserve the host stack, research live docs, compose judgments; examples are not capability ceilings. The bridge skill was rewritten, not copied. |
+| https://docs.typesafe.ai/agent-skill | Official installation already targets Claude Code, Codex and other agents. A Codex-only design was unnecessary. |
+| https://github.com/typesafe-ai/typesafe-sdk-python | Checked the official client approach and typed-questions interface. This release retains our tested HTTP runtime; it does not claim to embed the SDK. |
+| https://github.com/browser-use/jev-ultrafast | Reviewed dynamic candidate/action selection and questions.py. Learned to separate selecting supported actions from text generation. Browser code is not bundled or claimed implemented. |
+| https://github.com/modelcontextprotocol/python-sdk | Use the official FastMCP server/client SDK as an optional adapter. No hand-rolled lifecycle or JSON-RPC loop. |
+| https://agentskills.io/specification | Portable SKILL.md, scripts and references with progressive disclosure. Host-specific metadata is optional. |
+| https://developers.openai.com/codex/skills | Shared .agents/skills placement and optional OpenAI metadata. |
+| https://code.claude.com/docs/en/skills | Claude .claude/skills placement for the installer adapter. |
+| https://geminicli.com/docs/tools/mcp-server/ | Gemini CLI accepts stdio MCP; no need to impersonate a model provider. Host registration and live behavior remain separate checks. |
 
-このリポジトリは非公式の日本語操作スキルであり、公式スキルのコピーや自動インストールではない。
+## Corrected assumptions
 
-## 取り込み元
+- Removed output-in-Japanese instructions and any need for a language parameter.
+- Removed mandatory Codex-centered storage and onboarding. Explicit legacy settings
+  remain supported to preserve existing credentials and usage ledgers.
+- Removed our hardcoded Choice limit of 100 in favor of the documented 255 maximum:
+  https://docs.typesafe.ai/primitives/choice
+- Accepted structured/null instructions and descriptions, including Noul criteria:
+  https://docs.typesafe.ai/primitives/advanced
+- Retained Score's 2–10 levels because that is documented upstream, not our preference:
+  https://docs.typesafe.ai/primitives/score
+- Removed settings-loader ceilings of 20 batch items and 30 seconds. Visible defaults
+  remain local resource controls. They are not provider capability claims.
+- Added explicit backup updates rather than requiring users to hand-edit installed code.
 
-`jev-natural-skill-v1.0.0.zip`
+The HTTP reference (https://docs.typesafe.ai/api) has narrower wording for some
+EntryType fields than the dedicated Advanced Structure page. The implementation
+follows the latter's explicit table; tests check serialization, not actual model
+acceptance. SDK and desktop compatibility must be tested against installed versions.
 
-SHA-256: `62d96e85dedbed164ee71731fc5e90a5cfd321425f0764a48c4667374411a39a`
-
-`jev/scripts/_vendor/jev_core.py`は、以前作成したJev Worker 0.2.0から再利用された独自クライアント。公式SDKではなく、Python標準ライブラリによるHTTP・検証・DPAPI・使用量管理を行う。今回のリポジトリへの転記後も、実行用Pythonコード3ファイルのGit blobハッシュがローカルの元ファイルと一致することを確認した。
-
-古いZIP用のチェックサム一覧と過去のテストログは、新しいリポジトリ全体の検証結果と紛らわしくなるため取り込んでいない。APIキー、利用者のメール、会話履歴、画像、モデル重み、アプリ本体も含めていない。
-
-LICENSE.txtは元の配布物の注記を保持したものであり、この取り込みで新たなOSSライセンスを選定していない。
+No third-party implementation code was copied. Existing project license terms remain
+unchanged. References are not endorsements or proof of equivalent performance.

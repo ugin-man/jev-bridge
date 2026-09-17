@@ -1,46 +1,99 @@
 # jev-bridge
 
-**日本語で頼む → 普段のLLMが入力を組み立てる → Jevが判定する → 日本語で結果を受け取る。**
+**Ask your agent to use Jev. The agent handles the interface; you describe the work.**
 
-TypeSafeのJevを自然言語で使うための非公式ブリッジです。利用者にJSON、Python、フィールド名を入力させず、Codex側のLLMが準備・形式検査・許可された実行・説明を担当します。
+An unofficial, host-neutral bridge to TypeSafe's Jev. Agent Skill, stdio MCP, JSON
+CLI and Python API share the same execution runtime. There is no language selector,
+required Codex account, product-matching-only workflow, or second generative model.
 
-## まず使う
+[日本語ガイド](README_JA.md) · [Connections](jev/references/CONNECTIONS.md) ·
+[Research and design](SOURCES.md) · [Verification](TEST_REPORT.md)
 
-このリポジトリをローカルCodexで開き、次のように頼んでください。
+## Start with your existing agent
 
-> HANDOFF_FOR_CODEX.mdを読んで、Jevスキルを導入して。既存のモデル、Gemini、MCP、認証設定は変えないで。まず外部送信なしで確認し、APIキーの入力が必要なところだけ案内して。
+Open this repository in an agent that can read files and run local tools, then ask:
 
-Windowsで手動導入する場合は、リポジトリをダウンロードして展開し、`INSTALL.cmd`を開きます。Python 3.11以上が必要です。新規のキーは`SET-KEY.cmd`のローカル非表示入力で設定し、チャットやGitHubには貼らないでください。
+> Read HANDOFF.md and set up the Jev bridge for this environment. Keep my existing
+> models, authentication and other integrations. Handle the technical steps yourself;
+> only ask me for information or authorization that is genuinely missing.
 
-導入後の依頼例：
+The agent selects the appropriate route. The user does not have to author JSON,
+pick question types, or repeatedly specify presentation details.
 
-> Jevで、この2つの商品が同じものか確認して。型番・色・付属品の違いと、情報不足を分けて教えて。
+| Route | When to use it |
+| --- | --- |
+| Agent Skill | A host that can load SKILL.md and execute local tools |
+| MCP | A host supporting local stdio MCP, including non-skill hosts |
+| CLI | Shell workflows and programs in any language that can exchange JSON |
+| Python API | Import the shared bridge in your application |
 
-詳しい操作と取り外しは[日本語ガイド](README_JA.md)へ。
+A hosted chat interface without tool execution or a local MCP bridge cannot run a
+local program merely by reading this README. Support is capability-based, not a
+claim that every app/version has been tested.
 
-## 今の実装
+## Installation
 
-- `jev/`：インストールするスキル。自然言語の処理はホストLLMが担当します。
-- `jev/scripts/jev.py`：接続状態の確認、入力検査、単発・最大20件の判定、結果保存。
-- `jev/scripts/_vendor/jev_core.py`：TypeSafe HTTPクライアント、入力・応答検証、Windows DPAPI、ローカル使用量管理。
-- `tests/`：実APIを呼ばない模擬応答の回帰テスト。
+Python 3.11+ is required. The CLI has no third-party runtime dependencies.
+In a virtual environment, `python -m pip install .` installs the `jev-bridge` command.
+Use `python -m pip install '.[mcp]'` for the official MCP Python SDK adapter;
+`python -m pip install '.[keyring]'` adds native OS credential-vault support.
+These install from this source checkout; no PyPI publication is claimed.
 
-基点は`jev-natural-skill` 1.0.0です。以前のMCP HelperやWorkerの導入は必須ではありません。既存のキー保存先を再利用する経路はありますが、モデル一覧、プロファイル、MCP設定は変更しません。
+For an Agent Skill, run `python install_skill.py`. It installs `jev/` into the shared
+user `.agents/skills` directory. `--target claude` uses `.claude/skills`;
+`--scope project` selects project-local installation; `--skills-root PATH` supports
+other hosts. Host configuration and credentials are not rewritten.
+`--update` explicitly replaces a different skill while keeping a backup outside the
+active skills directory. Repeating an identical installation is a no-op.
 
-これはJevを汎用会話モデルに変えるものでも、モデル選択欄に追加するものでもありません。ブラウザでの商品調査、購入・出品、常駐自動運転も現状の機能には含みません。
+Windows launchers remain available. The Python commands work across Windows,
+macOS and Linux; no `.cmd` execution is required outside Windows.
 
-## 検査と開発
+## Use the runtime
 
-外部送信なしの検査は`CHECK.cmd`、または`python -I -m unittest discover -s tests -v`です。開発時は[AGENTS.md](AGENTS.md)を読み、[検査状況](TEST_REPORT.md)と[次の開発順](ROADMAP.md)を確認してください。
+`jev-bridge status` checks local state without an API call.
+`jev-bridge validate --file request.json` validates offline.
+`jev-bridge run --file request.json --execute --out result.json` executes an
+authorized request. `--file -` reads from stdin. The agent writes the input.
 
-GitHubのコードを更新しても、各PCにコピー済みのスキルは自動更新されません。別内容の同名スキルをインストーラーが勝手に上書きすることもありません。
+For MCP, register an absolute `jev-bridge` executable with the single argument `mcp`.
+The tools are `jev_status`, `jev_validate`, `jev_evaluate`, and `jev_batch`.
+See [connection details](jev/references/CONNECTIONS.md) for source-tree commands,
+credentials, existing stores, resource settings and host capability requirements.
 
-## 秘密情報と費用
+For Python integrations, `from jev_bridge import Bridge` exposes `status()` and
+`evaluate(request, execute=False)`. The same methods are used by MCP. Execution is
+explicitly enabled only for the scope the user authorized.
 
-APIキー、実データ、結果、ローカル設定、認証情報をコミットしないでください。作業データはGit管理対象外の`local/`や`results/`に置きます。公開Issueにはキーや個人情報を含むログを貼らないでください。
+## What changed in 2.0
 
-`run`は`--execute`がなければ外部送信しません。実API利用はTypeSafe側のクレジットを消費する可能性があり、ChatGPTの契約枠に含まれるとは扱いません。LLMの準備・説明コストも残ります。初期の回数・バイト制限は金額のハード上限ではありません。
+Removed presentation-language requirements and the Codex-centered onboarding/storage
+default. Added generic/Claude/project/custom skill installation, backup updates,
+a packaged CLI/Python interface, and official-SDK MCP transport. Brought accepted
+question descriptions in line with TypeSafe's structured/null EntryType guidance.
+Choice supports the documented 255 options rather than our previous 100-option cap.
+The settings loader no longer hard-caps batches at 20 or timeouts at 30 seconds.
 
-[参照仕様](SOURCES.md) / [ライセンスに関する既存の注記](LICENSE.txt)
+Default resource budgets remain conservative and visible in `status`; configure them
+for the authorized workload. A default is not a permanent service limit. Daily caps
+and batch deadlines may explicitly be disabled with zero. No automatic retry, account
+switch, top-up, blanket tool permission or plaintext-secret fallback was added.
 
-OpenAI・TypeSafeの公式製品、公式SDK、公式スキルではありません。
+## Scope and verification
+
+The TypeSafe [official skill](https://github.com/typesafe-ai/skills) is the primary
+reference for designing integrations. This project adds reusable execution and
+connection routes; it does not replace Jev with a general text-generation model.
+Selection, extraction from candidates, ranking, routing and action selection can be
+combined by the host. Browser control itself is not bundled into this release.
+
+All tests use synthetic data or offline protocol traffic. Real Jev accuracy,
+account access and each desktop app's end-to-end behavior require separate testing.
+See TEST_REPORT.md and the Actions run for the exact commit. Local skill copies do
+not update merely because the GitHub repository changed.
+
+Never commit keys, local settings, private input, result files or credential blobs.
+TypeSafe charges are separate from the host model's usage. Local counters are not
+an account balance or a currency-denominated spending limit.
+
+Not an official OpenAI, Anthropic, Google or TypeSafe product.
