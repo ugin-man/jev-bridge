@@ -27,4 +27,5 @@ jobs:
       - name: Run offline and SDK protocol tests
         env:
           JEV_REQUIRE_MCP_TESTS: '1'
+          JEV_REQUIRE_TYPESAFE_TESTS: '1'
         run: python -I -m unittest discover -s tests -v

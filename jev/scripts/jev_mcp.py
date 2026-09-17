@@ -6,17 +6,15 @@ import sys
 from typing import Any
 from jev_bridge import Bridge, JevError
 
-INSTRUCTIONS = """Use Jev for typed judgments that serve the user's task. You prepare
-questions and interpret actual results; the user need not write code or choose
-API types. Questions map IDs to {type, instructions, criteria}. Types: choice
-(criteria maps option names to descriptions), noul (yes probability; optional
-true/false descriptions), score (2-10 ordered descriptive levels). IDs are not
-seen by Jev: put the full question in instructions. Independent questions over
-the same evidence can share a request. Infer presentation from conversation.
-execute=false validates without network; execute=true sends evidence to TypeSafe
-and may consume credits. Honor scoped consent and host approvals. Never call a
-mock or offline result a Jev judgment, invent explanations, or treat confidence
-as measured accuracy. Tools return decisions; they do not execute chosen actions.
+INSTRUCTIONS = """Execution companion to the official TypeSafe skill. Use the installed
+`typesafe-ai` skill for judgment design and provider guidance, or read its official
+file at https://github.com/typesafe-ai/skills/blob/main/skills/typesafe-ai/SKILL.md.
+This server adds connections, local budgets and result handling, not a replacement
+skill. Prepare the user's inputs yourself. execute=false validates without network;
+execute=true sends the authorized material to TypeSafe and may consume credits.
+Preserve host approvals. Return actual results; do not call a mock a Jev judgment
+or turn a decision into permission for another action. Reuse upstream guidance
+already loaded in this task, not a network lookup per item.
 """
 
 

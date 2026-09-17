@@ -1,99 +1,83 @@
 # jev-bridge
 
-**Ask your agent to use Jev. The agent handles the interface; you describe the work.**
+**Official TypeSafe guidance and SDK, with a reusable execution layer on top.**
 
-An unofficial, host-neutral bridge to TypeSafe's Jev. Agent Skill, stdio MCP, JSON
-CLI and Python API share the same execution runtime. There is no language selector,
-required Codex account, product-matching-only workflow, or second generative model.
+Describe the work to your existing agent. The official `typesafe-ai` skill teaches
+it how to use TypeSafe. Jev Bridge adds ready-made MCP, CLI and Python connections,
+credential storage, local usage controls, bounded batches and saved-result handling.
+It does not maintain a rewritten official skill or an alternative TypeSafe SDK.
 
-[日本語ガイド](README_JA.md) · [Connections](jev/references/CONNECTIONS.md) ·
-[Research and design](SOURCES.md) · [Verification](TEST_REPORT.md)
+[日本語](README_JA.md) · [Upstream setup](jev/references/UPSTREAM.md) ·
+[Connections](jev/references/CONNECTIONS.md) · [Verification](TEST_REPORT.md)
 
-## Start with your existing agent
+## Start with your agent
 
-Open this repository in an agent that can read files and run local tools, then ask:
+Open this checkout in an agent with local tool execution and ask:
 
-> Read HANDOFF.md and set up the Jev bridge for this environment. Keep my existing
-> models, authentication and other integrations. Handle the technical steps yourself;
-> only ask me for information or authorization that is genuinely missing.
+> Read HANDOFF.md. Use the official TypeSafe skill and set up Jev Bridge for this
+> environment. Keep my existing models, integrations and credentials. Handle the
+> technical steps; ask only for genuinely missing information or permission.
 
-The agent selects the appropriate route. The user does not have to author JSON,
-pick question types, or repeatedly specify presentation details.
+The handoff reuses an installed official skill, or chooses **one** upstream
+installation method. Our `jev` companion only explains bridge execution; it does
+not install, overwrite or pretend to be `typesafe-ai`. Hosts without skill support
+can read the official file directly and use MCP/CLI. Already structured requests
+do not require installing a skill.
 
-| Route | When to use it |
+## What comes from where
+
+| Owner | Responsibility |
 | --- | --- |
-| Agent Skill | A host that can load SKILL.md and execute local tools |
-| MCP | A host supporting local stdio MCP, including non-skill hosts |
-| CLI | Shell workflows and programs in any language that can exchange JSON |
-| Python API | Import the shared bridge in your application |
+| Official TypeSafe skill/docs | Capabilities, judgment design, API concepts and cookbooks |
+| Official TypeSafe Python SDK | Provider requests and typed response parsing |
+| Jev Bridge | Host connections, local credentials, budgets, batch/result handling |
 
-A hosted chat interface without tool execution or a local MCP bridge cannot run a
-local program merely by reading this README. Support is capability-based, not a
-claim that every app/version has been tested.
+There is no mandatory language selector, Codex account or fixed task domain.
+The benefit is prepared execution tooling, not greater Jev intelligence. A remote
+chat with neither local execution nor an MCP bridge cannot run local programs.
 
-## Installation
+## Install
 
-Python 3.11+ is required. The CLI has no third-party runtime dependencies.
-In a virtual environment, `python -m pip install .` installs the `jev-bridge` command.
-Use `python -m pip install '.[mcp]'` for the official MCP Python SDK adapter;
-`python -m pip install '.[keyring]'` adds native OS credential-vault support.
-These install from this source checkout; no PyPI publication is claimed.
+Python 3.11+ is required. In a suitable environment, `python -m pip install .`
+installs the CLI and the declared official `typesafe-sdk` dependency. Use
+`python -m pip install '.[mcp,keyring]'` to include the official MCP SDK and native
+credential-vault support. This is installation from source, not a PyPI release claim.
 
-For an Agent Skill, run `python install_skill.py`. It installs `jev/` into the shared
-user `.agents/skills` directory. `--target claude` uses `.claude/skills`;
-`--scope project` selects project-local installation; `--skills-root PATH` supports
-other hosts. Host configuration and credentials are not rewritten.
-`--update` explicitly replaces a different skill while keeping a backup outside the
-active skills directory. Repeating an identical installation is a no-op.
+For the optional execution companion, `python install_skill.py` copies `jev/` to
+`.agents/skills`; `--target claude`, `--scope project`, and `--skills-root PATH`
+provide other placements. `--update` keeps a backup. **This installs only our
+companion**; install/update the official skill through upstream's own mechanism.
+See [one-method official setup](jev/references/UPSTREAM.md).
 
-Windows launchers remain available. The Python commands work across Windows,
-macOS and Linux; no `.cmd` execution is required outside Windows.
+## Interfaces
 
-## Use the runtime
+- MCP: absolute `jev-bridge` executable with argument `mcp`.
+- CLI: `jev-bridge status`, `validate --file request.json`, and
+  `run --file request.json --execute --out new-result.json`; stdin is `--file -`.
+- Python: `from jev_bridge import Bridge`, then `evaluate(request, execute=False)`.
+- Skill: the small `jev` execution companion alongside official `typesafe-ai`.
 
-`jev-bridge status` checks local state without an API call.
-`jev-bridge validate --file request.json` validates offline.
-`jev-bridge run --file request.json --execute --out result.json` executes an
-authorized request. `--file -` reads from stdin. The agent writes the input.
+The agent builds requests; users do not edit JSON. Offline validation works without
+a key or SDK. Real calls use the official SDK and are never silently redirected to
+a legacy client. A missing SDK is reported before reserving paid-call budget.
 
-For MCP, register an absolute `jev-bridge` executable with the single argument `mcp`.
-The tools are `jev_status`, `jev_validate`, `jev_evaluate`, and `jev_batch`.
-See [connection details](jev/references/CONNECTIONS.md) for source-tree commands,
-credentials, existing stores, resource settings and host capability requirements.
+## Execution policy and compatibility
 
-For Python integrations, `from jev_bridge import Bridge` exposes `status()` and
-`evaluate(request, execute=False)`. The same methods are used by MCP. Execution is
-explicitly enabled only for the scope the user authorized.
+Keep the existing storage/credential selection, configurable resource budgets,
+explicit execution, no-blind-retry behavior and result protection. The SDK adapter
+explicitly pins the provider endpoint/model, verified TLS, redirect refusal, proxy
+opt-in and zero automatic retries. Incoming response streams are bounded; decoded
+content is checked too. SDK/debug logs may contain payloads if the host enables them.
+No log settings are enabled by the bridge.
 
-## What changed in 2.0
+Batches remain sequential separate calls. Counters are local resource accounting,
+not a monetary cap. Unknown token usage stays null. Local bridge compatibility
+checks are versioned independently of TypeSafe's capabilities. See
+[connection notes](jev/references/CONNECTIONS.md) and [source record](SOURCES.md).
 
-Removed presentation-language requirements and the Codex-centered onboarding/storage
-default. Added generic/Claude/project/custom skill installation, backup updates,
-a packaged CLI/Python interface, and official-SDK MCP transport. Brought accepted
-question descriptions in line with TypeSafe's structured/null EntryType guidance.
-Choice supports the documented 255 options rather than our previous 100-option cap.
-The settings loader no longer hard-caps batches at 20 or timeouts at 30 seconds.
+All tests use synthetic responses or local protocol traffic. SDK integration tests
+are not live Jev access/accuracy tests, nor proof of every desktop host's behavior.
+GitHub changes do not automatically update installed copies. Never commit private
+keys, source documents, local settings or results.
 
-Default resource budgets remain conservative and visible in `status`; configure them
-for the authorized workload. A default is not a permanent service limit. Daily caps
-and batch deadlines may explicitly be disabled with zero. No automatic retry, account
-switch, top-up, blanket tool permission or plaintext-secret fallback was added.
-
-## Scope and verification
-
-The TypeSafe [official skill](https://github.com/typesafe-ai/skills) is the primary
-reference for designing integrations. This project adds reusable execution and
-connection routes; it does not replace Jev with a general text-generation model.
-Selection, extraction from candidates, ranking, routing and action selection can be
-combined by the host. Browser control itself is not bundled into this release.
-
-All tests use synthetic data or offline protocol traffic. Real Jev accuracy,
-account access and each desktop app's end-to-end behavior require separate testing.
-See TEST_REPORT.md and the Actions run for the exact commit. Local skill copies do
-not update merely because the GitHub repository changed.
-
-Never commit keys, local settings, private input, result files or credential blobs.
-TypeSafe charges are separate from the host model's usage. Local counters are not
-an account balance or a currency-denominated spending limit.
-
-Not an official OpenAI, Anthropic, Google or TypeSafe product.
+Unofficial companion; not an official TypeSafe, OpenAI, Anthropic or Google product.

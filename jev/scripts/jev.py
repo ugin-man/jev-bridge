@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "_vendor"))
 from jev_core import (JevClient, JevError, Settings, build_payload,
                       encode_json, save_key, strict_json)
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 
 def selected_home() -> tuple[Path, str]:

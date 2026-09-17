@@ -1,7 +1,7 @@
 # Connections
 
-All routes share `scripts/jev.py` and the HTTP client under `_vendor/`. The latter
-is this project's maintained client, not vendored TypeSafe SDK code.
+All routes share `scripts/jev.py` and the HTTP client under `_vendor/`. The local core owns execution guards and ledgers; provider traffic uses the official
+TypeSafe Python SDK through a small adapter. See [UPSTREAM.md](UPSTREAM.md).
 
 ## Agent Skill + local execution
 
@@ -60,3 +60,7 @@ Local `settings.json` controls limits. `max_batch_items` is no longer capped at 
 by the loader. Daily caps and `max_batch_seconds` may be set to 0 to disable those
 local limits; do so only after reviewing the scope. Limits are not monetary ceilings.
 `trust_environment=true` opts into configured HTTP proxies; verified TLS remains on.
+
+Official guidance is loaded separately; our installer only manages the execution
+companion. Real requests need the declared typesafe-sdk dependency. Old CLI/MCP
+entry points and credential stores remain compatible. No provider SDK is vendored.

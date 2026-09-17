@@ -9,7 +9,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import jev as cli
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 JevError = cli.JevError
 
 

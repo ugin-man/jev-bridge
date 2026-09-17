@@ -1,3 +1,13 @@
+# 2.1.0 — official foundation, independent execution layer
+
+- Replaced duplicated TypeSafe teaching with a short bridge execution companion.
+- Added one-method upstream skill setup; never vendor or overwrite the official skill.
+- Default provider traffic uses official typesafe-sdk; removed handwritten urllib HTTP.
+- Preserved MCP/CLI/Python, stores, budgets, validation, batches and result protection.
+- Disabled SDK retries explicitly; retained endpoint/TLS/redirect/proxy policy.
+- Missing SDK fails before budget reservation; unreported usage stays null.
+- Added real-SDK mocked-HTTP regression tests and upstream-ownership checks.
+
 # Changelog
 
 ## 2.0.0 — 2026-09-17
