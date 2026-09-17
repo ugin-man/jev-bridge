@@ -1,38 +1,28 @@
-# Research and design record — 2026-09-17
+# Upstream-first design record — 2.1
 
-Inspected primary sources, not a list of unverified search matches:
+Inspected the actual official skill and Python SDK public implementation. The
+uploaded official SKILL.md delegates concepts to live docs; we now follow it rather
+than maintaining our own summary of question design.
 
-| Source | What was actually adopted |
-| --- | --- |
-| https://github.com/typesafe-ai/skills/blob/main/skills/typesafe-ai/SKILL.md | Start from desired behavior, preserve the host stack, research live docs, compose judgments; examples are not capability ceilings. The bridge skill was rewritten, not copied. |
-| https://docs.typesafe.ai/agent-skill | Official installation already targets Claude Code, Codex and other agents. A Codex-only design was unnecessary. |
-| https://github.com/typesafe-ai/typesafe-sdk-python | Checked the official client approach and typed-questions interface. This release retains our tested HTTP runtime; it does not claim to embed the SDK. |
-| https://github.com/browser-use/jev-ultrafast | Reviewed dynamic candidate/action selection and questions.py. Learned to separate selecting supported actions from text generation. Browser code is not bundled or claimed implemented. |
-| https://github.com/modelcontextprotocol/python-sdk | Use the official FastMCP server/client SDK as an optional adapter. No hand-rolled lifecycle or JSON-RPC loop. |
-| https://agentskills.io/specification | Portable SKILL.md, scripts and references with progressive disclosure. Host-specific metadata is optional. |
-| https://developers.openai.com/codex/skills | Shared .agents/skills placement and optional OpenAI metadata. |
-| https://code.claude.com/docs/en/skills | Claude .claude/skills placement for the installer adapter. |
-| https://geminicli.com/docs/tools/mcp-server/ | Gemini CLI accepts stdio MCP; no need to impersonate a model provider. Host registration and live behavior remain separate checks. |
+- Official skill and installation: https://github.com/typesafe-ai/skills
+  Upstream owns this file. It is installed/read directly and is NOT vendored here.
+- Official SDK: https://github.com/typesafe-ai/typesafe-sdk-python
+  Inspected `pyproject.toml` (0.6.0), public exports, synchronous client,
+  `RetryPolicy`, endpoint construction, typed responses and `raw_http_response`.
+  The bridge now calls `TypeSafeClient.system_one` with explicit zero retries.
+- Upstream typed responses allow unreported token counts. Bridge results preserve
+  null and do not pretend the local token ledger is complete in that case.
+- Official MCP SDK: https://github.com/modelcontextprotocol/python-sdk
+  Continues to own stdio lifecycle/protocol; it is distinct from the TypeSafe SDK.
+- Earlier v2 design reference: https://github.com/browser-use/jev-ultrafast
+  Informed action-selection composition, not bundled browser automation.
 
-## Corrected assumptions
+The former handwritten HTTP path was removed. Bridge-local validation remains a
+versioned compatibility/integrity guard, not a competing provider SDK or universal
+capability taxonomy. Synthetic assets test bridge behavior, not recommended general
+rubrics. No upstream skill/SDK implementation code is copied into this project.
 
-- Removed output-in-Japanese instructions and any need for a language parameter.
-- Removed mandatory Codex-centered storage and onboarding. Explicit legacy settings
-  remain supported to preserve existing credentials and usage ledgers.
-- Removed our hardcoded Choice limit of 100 in favor of the documented 255 maximum:
-  https://docs.typesafe.ai/primitives/choice
-- Accepted structured/null instructions and descriptions, including Noul criteria:
-  https://docs.typesafe.ai/primitives/advanced
-- Retained Score's 2–10 levels because that is documented upstream, not our preference:
-  https://docs.typesafe.ai/primitives/score
-- Removed settings-loader ceilings of 20 batch items and 30 seconds. Visible defaults
-  remain local resource controls. They are not provider capability claims.
-- Added explicit backup updates rather than requiring users to hand-edit installed code.
-
-The HTTP reference (https://docs.typesafe.ai/api) has narrower wording for some
-EntryType fields than the dedicated Advanced Structure page. The implementation
-follows the latter's explicit table; tests check serialization, not actual model
-acceptance. SDK and desktop compatibility must be tested against installed versions.
-
-No third-party implementation code was copied. Existing project license terms remain
-unchanged. References are not endorsements or proof of equivalent performance.
+Web documentation retrieval failed in the editing environment for this revision;
+SDK details were verified directly through the official GitHub source instead.
+Real provider traffic remains untested here; SDK tests use its real code with an
+injected local HTTP transport. Existing project licensing remains unchanged.

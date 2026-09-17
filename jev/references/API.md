@@ -1,39 +1,26 @@
-# TypeSafe contract
+# Bridge envelope, not a second TypeSafe reference
 
-Verified against the live TypeSafe API, Choice, Score and Advanced Structure pages
-on 2026-09-17. Those pages, not this snapshot, are the upstream authority.
+Use the official skill and current TypeSafe docs for questions, criteria and model
+semantics: see [UPSTREAM.md](UPSTREAM.md). We intentionally do not mirror that guide.
 
-POST https://api.typesafe.ai/v1/systemone with a server-side Bearer API key.
-Body: `state`, `model` (default `jev-latest`), and `questions` keyed by caller IDs.
-This bridge selects the model through local settings, not untrusted input. The host
-supplies `{state, questions}` or `{items: [{id, state}, ...], questions}`.
+The bridge accepts exactly one of these envelopes:
 
-Each question contains `type`, `instructions`, and applicable `criteria`:
-- Choice: options mapped to descriptions; documented maximum 255 options.
-- Noul: a yes probability; optional `true`/`false` descriptions.
-- Score: 2–10 ordered level descriptions, each independently meaningful.
+- `state` and `questions`: one record and the provider's question definitions.
+- `items` and `questions`: independent `{id, state}` records sharing definitions.
 
-Instructions and descriptions can be strings, objects, arrays, or null, including
-structured Noul descriptions. IDs are routing keys, not prompts. Preserve Unicode
-input; this bridge does not impose a language field or transform text automatically.
+The host creates the inputs. `model` and resource settings belong to local
+configuration, not this untrusted request envelope. Individual questions are passed
+to the official SDK; this version retains compatibility checks for the bridge's
+existing question/answer interface. Unsupported new SDK fields require an adapter
+update, not an invented claim that TypeSafe can never support them.
 
-Response `answers` uses the same IDs. Noul has `noul` (0–1). Choice has `choice`,
-`probabilities`, `confidence`. Score has `score`, `legend`, `probabilities`,
-`confidence`; score is the probability-weighted level index. `usage` reports
-`input_tokens` and `output_tokens`. No free-form reasoning field is supplied.
+CLI: `validate --file request.json`, `run --file request.json --execute --out result.json`.
+`--file -` reads JSON from stdin. Python: `Bridge.evaluate(request, execute=False)`.
+MCP: `jev_status`, `jev_validate`, `jev_evaluate`, `jev_batch`.
 
-The bridge validates responses and returns raw decisions plus local execution
-metadata. Probabilities/confidence are not measured accuracy. Offline validation
-returns no answers. Repeated requests may incur repeated charges.
-
-Requests on different records are separate HTTP requests, not a discounted provider
-batch endpoint. Limits in settings.json protect local resources and can be adjusted;
-they must not be presented as provider limits. Score 10 and Choice 255 are different:
-they are documented upstream shape limits, so they remain enforced.
-
-Sources:
-- https://docs.typesafe.ai/api
-- https://docs.typesafe.ai/primitives/choice
-- https://docs.typesafe.ai/primitives/score
-- https://docs.typesafe.ai/primitives/advanced
-- https://docs.typesafe.ai/agent-skill
+Validation is local, has no answers and does not need a key. Real execution adds
+provider results and local execution metadata. Unreported token counts remain null,
+not fabricated zeros. Batch results identify completed, failed and unstarted IDs.
+These are sequential per-record SDK calls, not a provider batch discount or automatic
+parallel execution. Resource counters describe local submitted-payload budgets,
+not an account balance or currency-denominated spending limit.

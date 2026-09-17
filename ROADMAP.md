@@ -1,14 +1,13 @@
-# Scope after 2.0
+# Direction
 
-Implemented: portable skill, shared runtime, MCP/CLI/Python entries, platform-neutral
-storage, native credential-vault option, configurable resource limits, installation
-and backup updates. Language and host requirements are no longer product constraints.
+Use the official TypeSafe skill/docs for knowledge and the official SDK for provider
+traffic. Maintain only the execution value added by this project. Avoid competing
+skills, mirrored cookbooks and a second SDK.
 
-Next verification, not implied completed: one real authorized Jev request in the
-user's host, native macOS/Linux vault interaction, desktop-specific registration,
-quality on representative task data. No real API key is available in development.
+Next checks: one authorized real Jev response on the user's host, then actual
+workflow latency/error measurements. Consider bounded parallelism or richer job
+management only from those measurements; current batches remain sequential.
 
-Future changes should answer an observed need. Browser workers, remote authenticated
-MCP, streaming large datasets and official SDK migration are separate enhancements,
-not reasons to delay a working natural-language entry point or manufacture capability
-claims. Use the official skill/cookbooks and measured results before extending scope.
+SDK updates require compatibility tests. Host-specific onboarding and real account
+access are verified separately from synthetic tests. Do not invent accuracy or
+cost superiority over the official components.

@@ -1,29 +1,27 @@
 # Development contract
 
-Build a host-neutral way to delegate judgments to Jev. The user describes work; the
-host agent handles preparation and execution. Do not hardcode conversational language,
-require Codex, narrow the product to one example, or demand information inferable from
-context. Keep generative work with the host and deterministic work in code.
+Jev Bridge is an unofficial **execution companion** to official TypeSafe components,
+not a replacement skill or SDK. Read the installed official `typesafe-ai` skill,
+or its canonical GitHub file, before designing provider behavior. Follow its live
+docs workflow. See jev/references/UPSTREAM.md for one-method installation options.
 
-Research before inventing constraints. TypeSafe's official skill, API, SDK types and
-cookbooks are primary references. Read SOURCES.md and current relevant docs. Distinguish
-provider limits from configurable local budgets and unsupported host capabilities.
+Do not vendor, rewrite, translate or periodically copy the official skill/cookbooks
+into this repo. Keep jev/SKILL.md limited to bridge setup/execution. Provider HTTP
+and response parsing use the official `typesafe-sdk` dependency. Our retained local
+compatibility checks are guards for this bridge version, not universal provider
+limitations. Update SDK bounds only with real-SDK regression tests.
 
-Maintain one runtime for Skill, MCP, CLI and Python. Use the official MCP SDK instead
-of creating a private protocol. Avoid speculative framework rewrites and untested
-host support claims. Preserve old entry points and explicit legacy stores when feasible.
+Own the useful differences: common MCP/CLI/Python execution, credential storage,
+local resource/usage accounting, bounded batches and saved-result handling. Use the
+official MCP SDK. Keep existing entry points, permissions, stores and user work.
+Do not impose a conversation language, app, domain or a second generative model.
 
-No secrets, personal contact information, live input, logs or results in Git. Tests
-use synthetic fixtures only. No real API calls, automatic purchases, quota bypasses,
-account switching or approval weakening during development. Explain data transfer and
-fees within the user's actual scope; do not repeatedly ask for already granted consent.
+No secrets, personal contact details, live input or results in Git. Test data must
+be synthetic; never use paid API calls to run tests. No blind paid retries,
+automatic purchases, quota bypass, account switch or weakened host approvals.
 
-Before and after changes, run `python -I -m unittest discover -s tests -v`.
-CI must install the MCP extra and require real SDK protocol tests. Test Windows, Linux
-and macOS; report skips and actual API/host verification separately. Tests of Unicode
-round trips are not language-understanding benchmarks. Check packaging in a clean
-installation, not only source imports.
-
-Read current Git state before writing; preserve unrelated changes. Prefer a topic
-branch and reviewable PR. Never force-push. Verify remote refs and Actions for the
-exact commit before claiming delivery. A GitHub update does not update local copies.
+Run `python -I -m unittest discover -s tests -v` before and after edits. CI installs
+the TypeSafe and MCP SDKs and requires actual protocol/SDK tests without live API
+traffic. Check packaging outside the source tree. Report skips and real model/app
+verification separately. Inspect remote state and preserve unrelated changes;
+use a topic branch and reviewable PR, no force push. Verify remote delivery.

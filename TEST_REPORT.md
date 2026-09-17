@@ -1,3 +1,30 @@
+# Verification — 2.1.0
+
+This revision makes the bridge an execution companion to unmodified official
+TypeSafe guidance and uses the official Python SDK for provider traffic.
+
+Local Linux/Python 3.13.5: 73 tests discovered, 61 passed and 12 skipped (nine real
+TypeSafe SDK tests, two MCP SDK tests, one Windows-only DPAPI test). SDK dependencies
+were unavailable in the editing container. The dependency-free tests include
+missing-SDK budget protection, unknown usage, upstream installation isolation and
+all prior compatibility tests. A wheel was built locally without dependencies.
+
+CI installs the actual declared TypeSafe and MCP SDKs. JEV_REQUIRE_TYPESAFE_TESTS=1
+and JEV_REQUIRE_MCP_TESTS=1 make missing dependencies an error, not a silent skip.
+New tests inject an HTTP MockTransport into the actual SDK and test serialization,
+response parsing, retry refusal, redirects, connection/timeout errors, response
+limits, hidden error bodies and the full bridge/ledger result path. They are not
+fake replacements for the SDK. All responses and credentials are synthetic.
+
+Check the Actions run for the exact 2.1 commit before calling it verified. Windows,
+Linux and macOS each run Python 3.11/3.13. The official skill installer is documented
+but not run against a user's host during CI. Native vault UI, each real desktop
+host, API access and Jev accuracy remain separate live checks. No real TypeSafe
+request or user-key operation has been performed in this revision.
+
+---
+## Historical 2.0 record (not evidence for the changed 2.1 transport)
+
 # Verification — 2.0.0
 
 The v2 rework is tested with synthetic fixtures and offline tool traffic. No real

@@ -1,4 +1,4 @@
-"""Small, dependency-free client for the documented TypeSafe System One API.
+"""Local execution guards and accounting around the official TypeSafe SDK.
 
 Only explicitly supplied state/questions are sent. No files, browsers, shell
 commands, alternate providers, or implicit retries are exposed to the model.
@@ -11,20 +11,16 @@ import json
 import math
 import os
 import re
-import socket
 import sqlite3
-import ssl
 import tempfile
 import threading
 import time
-import urllib.error
-import urllib.request
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any, Callable
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 API_URL = "https://api.typesafe.ai/v1/systemone"
 MODEL = "jev-latest"
 
@@ -328,8 +324,9 @@ def validate_response(raw: Any, questions: dict[str, Any]) -> dict[str, Any]:
             if abs(a["score"] - expected) > 0.02 * len(keys):
                 bad()
     usage = raw.get("usage")
-    if not isinstance(usage, dict) or any(type(usage.get(k)) is not int or usage[k] < 0
-                                           for k in ("input_tokens", "output_tokens")):
+    if not isinstance(usage, dict) or any(usage.get(k) is not None and
+                    (type(usage[k]) is not int or usage[k] < 0)
+                    for k in ("input_tokens", "output_tokens")):
         bad()
     # Avoid propagating arbitrary unrecognized metadata/instructions from upstream.
     allowed = {"noul": ("type", "noul"),
@@ -337,60 +334,14 @@ def validate_response(raw: Any, questions: dict[str, Any]) -> dict[str, Any]:
                "score": ("type", "score", "legend", "probabilities", "confidence")}
     clean_answers = {qid: {k: answers[qid][k] for k in allowed[q["type"]]}
                      for qid, q in questions.items()}
-    clean_usage = {k: usage[k] for k in ("input_tokens", "output_tokens")}
+    clean_usage = {k: usage.get(k) for k in ("input_tokens", "output_tokens")}
     return {"model": raw["model"], "answers": clean_answers, "usage": clean_usage}
 
 
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Never forward credentials to a redirected destination."""
-    def redirect_request(self, req: Any, fp: Any, code: int, msg: str,
-                         headers: Any, newurl: str) -> None:
-        return None
-
-
 def post_http(data: bytes, key: str, settings: Settings) -> Any:
-    # Explicit empty proxies avoids sending this secret through an unexpected
-    # inherited proxy. Corporate users must review the transport before adapting.
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler(None if settings.trust_environment else {}), NoRedirect(),
-                                         urllib.request.HTTPSHandler(context=ssl.create_default_context()))
-    req = urllib.request.Request(API_URL, data=data, method="POST", headers={
-        "Authorization": "Bearer " + key,
-        "Content-Type": "application/json; charset=utf-8",
-        "Accept": "application/json",
-        "User-Agent": "jev-bridge/" + VERSION,
-    })
-    try:
-        with opener.open(req, timeout=settings.request_timeout_seconds) as response:
-            if response.status != 200:
-                raise JevError("http_error", "Unexpected TypeSafe HTTP status.", status=response.status,
-                               ambiguous_charge=True)
-            if response.headers.get_content_type() != "application/json":
-                raise JevError("invalid_api_response", "TypeSafe did not return JSON.", ambiguous_charge=True)
-            content = response.read(settings.max_response_bytes + 1)
-            if len(content) > settings.max_response_bytes:
-                raise JevError("response_too_large", "TypeSafe response exceeded the local size limit.", ambiguous_charge=True)
-            try:
-                return strict_json(content)
-            except (ValueError, UnicodeError, RecursionError) as exc:
-                raise JevError("invalid_api_response", "TypeSafe response was not valid JSON.", ambiguous_charge=True) from exc
-    except urllib.error.HTTPError as exc:
-        code = exc.code
-        exc.close()  # Do not log/return the body; it may echo submitted data.
-        messages = {
-            401: "TypeSafe rejected the API key. Update it using SET-KEY.cmd.",
-            402: "TypeSafe requires account credit/payment. No automatic purchase or top-up was attempted.",
-            403: "TypeSafe denied access for this account or key.",
-            404: "TypeSafe endpoint/model was not found. Check official API availability.",
-            422: "TypeSafe rejected the request shape. Check the official schema and supplied questions.",
-            429: "TypeSafe rate limit reached. Stop; wait before explicitly retrying.",
-            529: "TypeSafe is overloaded. Stop; wait before explicitly retrying.",
-        }
-        raise JevError("http_error", messages.get(code, "TypeSafe returned an HTTP error; response body omitted."),
-                       status=code, ambiguous_charge=code >= 500) from exc
-    except (TimeoutError, socket.timeout) as exc:
-        raise JevError("timeout", "TypeSafe request timed out. It may already have been processed; no automatic retry.", ambiguous_charge=True) from exc
-    except (urllib.error.URLError, OSError) as exc:
-        raise JevError("network_error", "Could not complete the verified HTTPS request to TypeSafe. No automatic retry.", ambiguous_charge=True) from exc
+    """Compatibility entry point; actual HTTP is owned by the official SDK."""
+    from typesafe_transport import send
+    return send(data, key, settings)
 
 
 class UsageLedger:
@@ -433,7 +384,9 @@ class UsageLedger:
             conn.commit()
         return day
 
-    def record_tokens(self, day: str, usage: dict[str, int]) -> bool:
+    def record_tokens(self, day: str, usage: dict[str, int | None]) -> bool:
+        if any(usage.get(k) is None for k in ("input_tokens", "output_tokens")):
+            return False  # Unknown provider counts remain unknown, never invented zeros.
         try:
             with self.db() as conn:
                 conn.execute("UPDATE daily SET input_tokens=input_tokens+?,output_tokens=output_tokens+? WHERE day=?",
@@ -469,13 +422,15 @@ class JevClient:
             ready, error = True, None
         except JevError as exc:
             ready, source, error = False, "none", exc.as_dict()
+        from typesafe_transport import sdk_status
         result = {"ok": True, "version": VERSION, "network_called": False,
+                  "provider_client": "official_typesafe_sdk", "sdk": sdk_status(),
                   "api_key_ready_locally": ready, "api_key_source": source,
                   "credential_validated_with_service": False,
                   "model": settings.model, "endpoint": API_URL,
                   "settings": asdict(settings),
                   "daily_usage": UsageLedger(self.home, settings).snapshot(),
-                  "note": "Tool registration/local key readiness does not prove an API call succeeds. External use may consume TypeSafe credits, separately from ChatGPT."}
+                  "note": "Tool registration/local key readiness does not prove an API call succeeds. External use may consume TypeSafe credits, separately from the host model."}
         if error:
             result["credential_error"] = error
         return result
@@ -494,6 +449,9 @@ class JevClient:
         with self.gate:
             self._check_cancel(cancel)
             key, _ = self.key_loader(self.home)
+            if self.transport is post_http:
+                from typesafe_transport import require_sdk
+                require_sdk()  # Missing dependencies must not reserve a paid-call budget.
             ledger = UsageLedger(self.home, settings)
             day = ledger.reserve(1, len(data))
             return self._send(payload, data, key, settings, ledger, day)
@@ -540,6 +498,9 @@ class JevClient:
         with self.gate:
             self._check_cancel(cancel)
             key, _ = self.key_loader(self.home)
+            if self.transport is post_http:
+                from typesafe_transport import require_sdk
+                require_sdk()  # Missing dependencies must not reserve a paid-call budget.
             ledger = UsageLedger(self.home, settings)
             day = ledger.reserve(len(prepared), sum(len(d) for _, _, d in prepared))
             results, attempted = [], 0
