@@ -8,11 +8,23 @@ Local Linux / Python 3.13: the suite currently has 57 tests; 54 pass and 3 skip
 could not be installed in this container, so SDK validation is delegated to CI,
 where JEV_REQUIRE_MCP_TESTS=1 makes missing SDK support a failure rather than a skip.
 
-CI exercises Windows/Linux/macOS and Python 3.11/3.13, installing the package with
-the MCP and keyring extras. It tests a real stdio SDK client/server handshake,
-tool enumeration, offline evaluation, error propagation and missing-key behavior.
-Windows also exercises DPAPI with a synthetic key. See Actions for the exact commit;
-a workflow file alone is not evidence that those jobs passed.
+## Confirmed GitHub Actions results
+
+Commit `f802b254d5a184c68968d3a80a868d8b36afc7dc` passed all six jobs in
+https://github.com/ugin-man/jev-bridge/actions/runs/35216245605
+(Windows, Linux and macOS, each with Python 3.11 and 3.13).
+
+CI installed the package with the MCP/keyring extras and ran an actual stdio SDK
+client/server handshake, tool discovery, offline evaluation, error propagation and
+missing-key checks. Windows also passed the DPAPI round trip with a synthetic key.
+The Windows/Python 3.13 log confirms MCP 1.30.0, keyring 25.7.0, and 57 tests with
+one platform-specific skip (the POSIX path test), no failures. On POSIX, the
+Windows-only DPAPI test is skipped instead. All 57 test cases are exercised across
+the matrix; this is not 57 model-accuracy measurements.
+
+The uploaded source tree was hash-matched to the local test tree. A separate local
+package installation and installed-command offline validation also succeeded.
+Subsequent commits should be checked against their own Actions results.
 
 New tests cover Unicode preservation without a language parameter, neutral storage,
 legacy-store preservation, configurable batches larger than 20, documented Choice
