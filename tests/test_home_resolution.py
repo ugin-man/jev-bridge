@@ -1,7 +1,5 @@
-"""Regression tests for home discovery without a Windows user profile."""
+"""Home discovery regressions; preserve explicit legacy homes, neutral fresh installs."""
 from __future__ import annotations
-
-import importlib.util
 import os
 import sys
 import tempfile
@@ -10,10 +8,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("jev_home_test_cli", ROOT / "jev/scripts/jev.py")
-bridge = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = bridge
-spec.loader.exec_module(bridge)
+sys.path.insert(0, str(ROOT / "jev/scripts"))
+import jev as bridge
 
 
 class HomeResolutionTests(unittest.TestCase):
@@ -42,13 +38,14 @@ class HomeResolutionTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "home_directory_unavailable")
         self.assertFalse(caught.exception.as_dict()["automatic_retry"])
 
-    def test_default_home_used_only_when_not_configured(self):
+    def test_default_home_is_application_neutral(self):
         with patch.dict(os.environ, {}, clear=True):
             with patch.object(Path, "home", return_value=self.home) as lookup:
                 selected, source = bridge.selected_home()
         lookup.assert_called_once_with()
-        self.assertEqual(selected, self.home / ".codex" / "tools" / "jev-skill")
-        self.assertEqual(source, "skill_storage")
+        self.assertEqual(selected.name, "jev-bridge")
+        self.assertNotIn(".codex", selected.parts)
+        self.assertEqual(source, "platform_storage")
 
 
 if __name__ == "__main__":

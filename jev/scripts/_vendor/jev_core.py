@@ -24,7 +24,7 @@ from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any, Callable
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 API_URL = "https://api.typesafe.ai/v1/systemone"
 MODEL = "jev-latest"
 
@@ -70,11 +70,11 @@ def encode_json(value: Any) -> bytes:
 
 
 def home_dir() -> Path:
-    """Prefer explicit local configuration; never accept a model-supplied path."""
-    if os.environ.get("JEV_HELPER_HOME"):
-        return Path(os.environ["JEV_HELPER_HOME"]).expanduser().resolve()
-    root = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
-    return (root / "tools" / "jev-helper").resolve()
+    from bridge_support import storage_home
+    try:
+        return storage_home()[0]
+    except (RuntimeError, OSError, ValueError) as exc:
+        raise JevError("home_directory_unavailable", "Configure JEV_BRIDGE_HOME locally.") from exc
 
 
 def atomic_write(path: Path, content: bytes, mode: int = 0o600) -> None:
@@ -103,6 +103,9 @@ class Settings:
     max_batch_items: int = 20
     max_daily_requests: int = 200
     max_daily_payload_bytes: int = 10_485_760
+    max_input_file_bytes: int = 4_194_304
+    max_batch_seconds: int = 90
+    trust_environment: bool = False
 
     @classmethod
     def load(cls, home: Path) -> "Settings":
@@ -116,20 +119,16 @@ class Settings:
             if set(raw) - {f.name for f in fields(cls)}:
                 raise ValueError()
             obj = cls(**raw)
-            if not isinstance(obj.model, str) or not re.fullmatch(r"jev[-\w.]{0,80}", obj.model):
+            if not isinstance(obj.model, str) or not obj.model.strip():
                 raise ValueError()
-            limits = {
-                "request_timeout_seconds": (1, 30),
-                "max_request_bytes": (1_024, 1_048_576),
-                "max_response_bytes": (1_024, 4_194_304),
-                "max_questions": (1, 500),
-                "max_batch_items": (1, 20),
-                "max_daily_requests": (1, 1_000_000),
-                "max_daily_payload_bytes": (1_024, 10_737_418_240),
-            }
-            for name, (lo, hi) in limits.items():
-                n = getattr(obj, name)
-                if type(n) is not int or not lo <= n <= hi:
+            if type(obj.trust_environment) is not bool:
+                raise ValueError()
+            optional_caps = {"max_daily_requests", "max_daily_payload_bytes", "max_batch_seconds"}
+            for field in fields(cls):
+                if field.name in {"model", "trust_environment"}:
+                    continue
+                value = getattr(obj, field.name)
+                if type(value) is not int or value < (0 if field.name in optional_caps else 1):
                     raise ValueError()
             return obj
         except (OSError, TypeError, ValueError, RecursionError) as exc:
@@ -139,7 +138,7 @@ class Settings:
 def _dpapi(data: bytes, *, decrypt: bool) -> bytes:
     """Windows current-user DPAPI. Does not fall back to plaintext storage."""
     if os.name != "nt":
-        raise JevError("windows_required", "Encrypted key storage requires Windows. Use TYPESAFE_API_KEY in the process environment elsewhere.")
+        raise JevError("windows_required", "This saved DPAPI credential requires the original Windows user. Configure a native vault or TYPESAFE_API_KEY on other platforms.")
     from ctypes import wintypes
 
     class DATA_BLOB(ctypes.Structure):
@@ -172,9 +171,37 @@ def validate_key(key: str) -> str:
     return key
 
 
+def secure_keyring():
+    try:
+        import keyring
+        backend = keyring.get_keyring()
+        # Only native OS credential vaults; never accept a plaintext fallback.
+        module = type(backend).__module__
+        if module not in {"keyring.backends.macOS", "keyring.backends.Windows",
+                          "keyring.backends.SecretService", "keyring.backends.kwallet"}:
+            raise RuntimeError()
+        return keyring
+    except Exception as exc:
+        raise JevError("secure_store_unavailable", "Install the keyring extra and configure an OS credential vault, or use TYPESAFE_API_KEY in the process environment. No plaintext fallback.") from exc
+
+
+def keyring_account(home: Path) -> str:
+    import hashlib
+    return hashlib.sha256(str(home.resolve()).encode("utf-8")).hexdigest()
+
+
 def save_key(home: Path, key: str) -> None:
-    encrypted = _dpapi(validate_key(key).encode("ascii"), decrypt=False)
-    atomic_write(home / "secrets" / "api-key.dpapi", encrypted)
+    key = validate_key(key)
+    if os.name == "nt":
+        encrypted = _dpapi(key.encode("ascii"), decrypt=False)
+        atomic_write(home / "secrets" / "api-key.dpapi", encrypted)
+        return
+    vault = secure_keyring()
+    try:
+        vault.set_password("jev-bridge", keyring_account(home), key)
+        atomic_write(home / "secrets" / "keyring.json", b'{"backend":"os-keyring"}\n')
+    except Exception as exc:
+        raise JevError("credential_error", "Could not complete OS credential storage. No key is printed.") from exc
 
 
 def load_key(home: Path) -> tuple[str, str]:
@@ -190,19 +217,25 @@ def load_key(home: Path) -> tuple[str, str]:
             raise
         except (OSError, ValueError, UnicodeError) as exc:
             raise JevError("credential_error", "Cannot read the saved key. Run SET-KEY.cmd as the same Windows user.") from exc
+    if (home / "secrets" / "keyring.json").exists():
+        try:
+            key = secure_keyring().get_password("jev-bridge", keyring_account(home))
+            return validate_key(key or ""), "os_keyring"
+        except JevError:
+            raise
+        except Exception as exc:
+            raise JevError("credential_error", "Cannot read the configured OS credential vault.") from exc
     env_key = os.environ.get("TYPESAFE_API_KEY", "")
     if env_key:
         return validate_key(env_key), "process_environment"
-    raise JevError("missing_api_key", "No TypeSafe API key is configured. Run SET-KEY.cmd locally; never paste a key into chat.")
+    raise JevError("missing_api_key", "No TypeSafe API key is configured. Run set-key locally or configure TYPESAFE_API_KEY; never paste a key into chat.")
 
 
 def validate_description(value: Any, label: str, *, nullable: bool = False) -> None:
     if nullable and value is None:
         return
-    if not isinstance(value, (str, dict, list)) or not value:
-        raise JevError("invalid_argument", f"{label} must be a nonempty string, object or array.")
-    if isinstance(value, str) and not value.strip():
-        raise JevError("invalid_argument", f"{label} cannot be blank.")
+    if not isinstance(value, (str, dict, list)):
+        raise JevError("invalid_argument", f"{label} must be a string, object or array.")
     encode_json(value)
 
 
@@ -210,33 +243,34 @@ def validate_questions(questions: Any, settings: Settings) -> dict[str, Any]:
     if not isinstance(questions, dict) or not 1 <= len(questions) <= settings.max_questions:
         raise JevError("invalid_questions", f"Supply 1..{settings.max_questions} questions as an object.")
     for qid, q in questions.items():
-        if not isinstance(qid, str) or not qid.strip() or len(qid) > 128:
-            raise JevError("invalid_questions", "Question IDs must be nonblank strings of at most 128 characters.")
+        if not isinstance(qid, str) or not qid.strip():
+            raise JevError("invalid_questions", "Question IDs must be nonblank strings.")
         if not isinstance(q, dict) or set(q) - {"type", "instructions", "criteria"}:
             raise JevError("invalid_questions", "Each question accepts only type, instructions and criteria.")
         kind = q.get("type")
         if kind not in ("choice", "score", "noul"):
             raise JevError("invalid_questions", "Question type must be choice, score or noul.")
-        validate_description(q.get("instructions"), "instructions")
+        if "instructions" not in q:
+            raise JevError("invalid_questions", "Question instructions are required.")
+        validate_description(q["instructions"], "instructions", nullable=True)
         criteria = q.get("criteria")
         if kind == "choice":
-            if not isinstance(criteria, dict) or not 2 <= len(criteria) <= 100:
-                raise JevError("invalid_questions", "Choice requires 2..100 labeled options (helper limit).")
+            if not isinstance(criteria, dict) or not 2 <= len(criteria) <= 255:
+                raise JevError("invalid_questions", "Choice requires 2..255 labeled options (documented TypeSafe limit).")
             for label, desc in criteria.items():
-                if not isinstance(label, str) or not label.strip() or len(label) > 256:
-                    raise JevError("invalid_questions", "Choice option labels must be nonblank strings of at most 256 characters.")
+                if not isinstance(label, str) or not label.strip():
+                    raise JevError("invalid_questions", "Choice option labels must be nonblank strings.")
                 validate_description(desc, "Choice description", nullable=True)
         elif kind == "score":
             if not isinstance(criteria, list) or not 2 <= len(criteria) <= 10:
                 raise JevError("invalid_questions", "Score requires 2..10 ordered level descriptions.")
             for desc in criteria:
-                validate_description(desc, "Score level")
+                validate_description(desc, "Score level", nullable=True)
         elif "criteria" in q:
-            if not isinstance(criteria, dict) or set(criteria) != {"true", "false"}:
-                raise JevError("invalid_questions", "Optional Noul criteria must contain true and false descriptions.")
+            if not isinstance(criteria, dict) or set(criteria) - {"true", "false"}:
+                raise JevError("invalid_questions", "Optional Noul criteria accepts true and false descriptions.")
             for desc in criteria.values():
-                if not isinstance(desc, str) or not desc.strip():
-                    raise JevError("invalid_questions", "Noul criteria descriptions must be nonblank strings.")
+                validate_description(desc, "Noul description", nullable=True)
     return copy.deepcopy(questions)
 
 
@@ -317,13 +351,13 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def post_http(data: bytes, key: str, settings: Settings) -> Any:
     # Explicit empty proxies avoids sending this secret through an unexpected
     # inherited proxy. Corporate users must review the transport before adapting.
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(),
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler(None if settings.trust_environment else {}), NoRedirect(),
                                          urllib.request.HTTPSHandler(context=ssl.create_default_context()))
     req = urllib.request.Request(API_URL, data=data, method="POST", headers={
         "Authorization": "Bearer " + key,
         "Content-Type": "application/json; charset=utf-8",
         "Accept": "application/json",
-        "User-Agent": "jev-mcp-helper/" + VERSION,
+        "User-Agent": "jev-bridge/" + VERSION,
     })
     try:
         with opener.open(req, timeout=settings.request_timeout_seconds) as response:
@@ -392,7 +426,8 @@ class UsageLedger:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute("INSERT OR IGNORE INTO daily VALUES (?,0,0,0,0)", (day,))
             row = conn.execute("SELECT requests,payload_bytes FROM daily WHERE day=?", (day,)).fetchone()
-            if row[0] + count > self.settings.max_daily_requests or row[1] + payload_bytes > self.settings.max_daily_payload_bytes:
+            if ((self.settings.max_daily_requests and row[0] + count > self.settings.max_daily_requests) or
+                    (self.settings.max_daily_payload_bytes and row[1] + payload_bytes > self.settings.max_daily_payload_bytes)):
                 raise JevError("daily_limit", "Local daily request/byte cap reached. Review usage and settings.json locally; the MCP tool cannot increase limits.")
             conn.execute("UPDATE daily SET requests=requests+?,payload_bytes=payload_bytes+? WHERE day=?", (count, payload_bytes, day))
             conn.commit()
@@ -490,8 +525,8 @@ class JevClient:
             if not isinstance(item, dict) or set(item) != {"id", "state"}:
                 raise JevError("invalid_argument", "Each batch item must contain only id and state.")
             identifier = item["id"]
-            if not isinstance(identifier, str) or not identifier.strip() or len(identifier) > 128 or identifier in seen:
-                raise JevError("invalid_argument", "Batch ids must be unique nonblank strings of at most 128 characters.")
+            if not isinstance(identifier, str) or not identifier.strip() or identifier in seen:
+                raise JevError("invalid_argument", "Batch ids must be unique nonblank strings.")
             seen.add(identifier)
             payload, data = build_payload(item["state"], questions, settings)
             prepared.append((identifier, payload, data))
@@ -508,7 +543,7 @@ class JevClient:
             ledger = UsageLedger(self.home, settings)
             day = ledger.reserve(len(prepared), sum(len(d) for _, _, d in prepared))
             results, attempted = [], 0
-            deadline = time.monotonic() + 90
+            deadline = time.monotonic() + settings.max_batch_seconds if settings.max_batch_seconds else float("inf")
             for identifier, payload, data in prepared:
                 if (cancel and cancel.is_set()) or time.monotonic() >= deadline:
                     break

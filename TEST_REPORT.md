@@ -1,27 +1,24 @@
-# 検査状況 — 初期リポジトリ取り込み
+# Verification — 2.0.0
 
-日付：2026-09-17
-基点：jev-natural-skill 1.0.0
+The v2 rework is tested with synthetic fixtures and offline tool traffic. No real
+TypeSafe API key is used and no paid Jev request is made by the suite.
 
-## ローカルで実行済み
+Local Linux / Python 3.13: the suite currently has 57 tests; 54 pass and 3 skip
+(the two optional MCP SDK tests and the Windows DPAPI test). The MCP dependency
+could not be installed in this container, so SDK validation is delegated to CI,
+where JEV_REQUIRE_MCP_TESTS=1 makes missing SDK support a failure rather than a skip.
 
-Linux / Python 3.13.5で、`python -I -m unittest discover -s tests -v`を実行し、30件すべて成功した。元のZIP展開後と、テスト側の文字列読込7か所を明示的なUTF-8へ修正した後の両方で確認した。後者は3.246秒だった。
+CI exercises Windows/Linux/macOS and Python 3.11/3.13, installing the package with
+the MCP and keyring extras. It tests a real stdio SDK client/server handshake,
+tool enumeration, offline evaluation, error propagation and missing-key behavior.
+Windows also exercises DPAPI with a synthetic key. See Actions for the exact commit;
+a workflow file alone is not evidence that those jobs passed.
 
-これは模擬応答による検査であり、TypeSafeの実APIには送信していない。30件はJevの正答率や自然言語の解釈成功率ではない。
+New tests cover Unicode preservation without a language parameter, neutral storage,
+legacy-store preservation, configurable batches larger than 20, documented Choice
+maximum, structured/null descriptions, CLI stdin, no accidental execution, installation
+backup updates, native-vault rejection of unsafe backends and existing-result protection.
 
-検査対象は、入力形式、サンプルとレシピ、無通信モード、明示実行時の模擬transport、バッチ分離と途中失敗、回数制限、重複JSON、結果上書き拒否、インストール競合、Python子プロセス、秘密の非表示など。
-
-## 取り込み時の変更
-
-実行用Pythonコードとスキルは配布済み1.0.0を基点にしている。テストの日本語を含むファイル読込をUTF-8で明示した。リポジトリの入口、開発ルール、開発順、Git管理対象外の設定を追加した。実APIの契約や動作を変更する目的の取り込みではない。
-
-## 別途確認すること
-
-- GitHub Actionsの結果は、対象コミットに対応する実際のチェック結果を確認する。ワークフローの配置をテスト成功と呼ばない。
-- Windowsでの.cmdの起動、DPAPI暗号化・復号、利用者の既存保存先との互換性。
-- 実際のデスクトップでのスキル表示、自然言語からの起動と操作。
-- 本物のTypeSafeキーでの認証、Jevの実応答、利用量。
-
-Windows上でPythonの模擬テストが通っても、実アプリ・DPAPI・本物のJev応答がすべて検証済みになるわけではない。
-
-強制終了や保存先の故障では、API側で処理済みなのに結果が保存されない場合がある。未完了マーカーを見たら状況を確認し、同じ要求を盲目的に再送しない。
+Still unverified: actual Jev responses/accuracy, each desktop application's end-to-end
+workflow, native interactive macOS/Linux vaults, user-local Windows launchers and
+corporate proxy environments. A protocol test is not a live model or app benchmark.

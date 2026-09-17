@@ -1,25 +1,14 @@
-# 開発順
+# Scope after 2.0
 
-## 1. 日本語の依頼から、本物の回答まで
+Implemented: portable skill, shared runtime, MCP/CLI/Python entries, platform-neutral
+storage, native credential-vault option, configurable resource limits, installation
+and backup updates. Language and host requirements are no longer product constraints.
 
-最優先は、利用者が「Jevで試して」と頼んで、入力の構造化を一切手伝わずに結果まで受け取れること。
+Next verification, not implied completed: one real authorized Jev request in the
+user's host, native macOS/Linux vault interaction, desktop-specific registration,
+quality on representative task data. No real API key is available in development.
 
-- スキルの配置と実アプリの認識を別々に確認する。
-- APIキーはローカルの非表示入力で設定する。GitHubやチャットには送らない。
-- 明示的に許可された無害なサンプルを1回送信する。
-- 実応答を日本語で返す。認証失敗、未招待、クレジット不足、入力不一致は区別する。
-- 使用したバージョン、送信件数、成功・失敗を秘密なしで記録する。
-
-これは初期リポジトリ作成時点では未完了。APIキーが画面に表示されたことと、実際のAPI応答成功を混同しない。
-
-## 2. 繰り返しを楽にする
-
-実接続が通ってから、名前付きレシピの選択・再利用、結果の日本語表示、20件単位の処理を改善する。現在もスクリプトにはレシピと上限付きバッチがあるため、先に既存機能を実際に使い、必要な不足だけを直す。
-
-インストール済みスキルの安全な更新・差分確認もこの段階の候補。既存の別内容を無断上書きしない。
-
-## 3. 必要ならWorkerへ広げる
-
-状態を持つ反復作業や外部ツールが実際に必要になった時点で、以前のWorker設計を評価する。モデル選択欄への統合は別の実機検証項目。表示だけで接続成功としない。
-
-固定手順の完了率、誤判定、ホストLLMへの引き継ぎ回数、成功一件あたりの総コストで判断する。大きな基盤を作ること自体をゴールにしない。
+Future changes should answer an observed need. Browser workers, remote authenticated
+MCP, streaming large datasets and official SDK migration are separate enhancements,
+not reasons to delay a working natural-language entry point or manufacture capability
+claims. Use the official skill/cookbooks and measured results before extending scope.

@@ -1,61 +1,62 @@
-# 接続と保存先
+# Connections
 
-## 通常：スキル内のスクリプト
+All routes share `scripts/jev.py` and the HTTP client under `_vendor/`. The latter
+is this project's maintained client, not vendored TypeSafe SDK code.
 
-`jev/scripts/jev.py` と `_vendor/jev_core.py` だけで動く。Python 3.11以上の標準ライブラリを使い、pip/npmや別のOpenAI APIキーは必要ない。自然文の解釈はホストのLLMが行い、スクリプトは検査とTypeSafeへの要求を行う。
+## Agent Skill + local execution
 
-保存先は次の順で選ぶ。
+Run `python -I <skill>/scripts/jev_bridge.py status`. Use the actual interpreter
+and absolute skill path. `validate --file request.json` checks locally;
+`run --file request.json --execute --out new-result.json` executes the authorized
+request. The old `scripts/jev.py` entry remains compatible. `--file -` reads UTF-8
+JSON from stdin, so non-Python programs can pipe requests without a temp file.
 
-1. ローカルで明示された環境変数 JEV_SKILL_HOME、JEV_WORKER_HOME、JEV_HELPER_HOME の順。
-2. CODEX_HOME（未指定ならユーザーの .codex）の tools/jev-worker、tools/jev-helper のうち、暗号化済みキーがある最初の場所。
-3. その2つのうち、すでに存在する最初のフォルダー。
-4. どちらもなければ同じCODEX_HOME配下の tools/jev-skill。
+Saved definitions: `run --recipe recipe.json --data data.json --execute --out result.json`.
+The host prepares these files. The user does not need to understand their syntax.
 
-キーの値を見せずに、statusのstorage_homeで選択結果を確認できる。元のキー・設定・使用量ファイルをコピーしない。同じ保存先なら日次カウンターを共用する。既存キーを更新するとその保存先を使うWorker/Helperにも影響するので、既存キーが使える場合はSET-KEYを不要に実行しない。
+## MCP
 
-スキルのインストール先は $HOME/.agents/skills/jev。CODEX_HOMEとは別で、これはCodexの公式ローカルスキル探索先に合わせたもの。スキルを入れてもモデルやMCPの設定は変えない。
+Install the repository into a virtual environment with `python -m pip install '.[mcp]'`.
+Configure a stdio server with that environment's absolute `jev-bridge` executable
+and the argument `mcp`. With an absolute Python path instead, use arguments
+`-I`, the absolute `jev/scripts/jev_bridge.py` path, and `mcp`.
+Use the host's own MCP settings; do not replace its configuration wholesale.
 
-## 既存MCPがすでに使える場合のみ
+Tools: `jev_status`, `jev_validate`, `jev_evaluate`, `jev_batch`. Evaluation defaults
+to `execute=false`; the host sets it true after scoped authorization. The official
+MCP Python SDK manages lifecycle, validation, cancellation and stdio transport.
+In-flight HTTP calls cannot necessarily be cancelled after reaching TypeSafe.
+No public HTTP listener or authentication proxy is silently created.
 
-通常は上記スクリプトでよい。ホストの制約などからMCPを利用するなら、まず実際に露出しているツールとスキーマを確認する。接続先が変われば設定・保存先も違う場合がある。上限や承認の回避に使わない。
+Codex, Claude Code, Claude Desktop, Gemini CLI and other stdio MCP hosts can use
+this protocol route when their environment supports local servers. App-specific
+visibility and approval behavior still require actual host testing. A remote-only
+chat service cannot execute a local stdio process without a host-provided bridge.
 
-Jev Helper 1.0.0では `jev_status`、`jev_evaluate`、`jev_batch` 等。`jev_evaluate` はstate/questions/dry_run、`jev_batch` はitems/questions/dry_run。構造化結果の中に answers がある。返った実際のスキーマを優先する。
+## Python or other applications
 
-Jev Worker 0.2.0だけの場合は、状態を持つ手順が必要なときに限り次の2ノードへ変換できる。
+After `pip install .`, `from jev_bridge import Bridge` exposes `status()` and
+`evaluate(request, execute=False)`. Execution must be explicitly enabled.
+Non-Python apps can use MCP or the JSON CLI. No extra generative-model API is
+required: the host prepares the questions using its existing model.
 
-```json
-{
-  "plan": {
-    "version": 1,
-    "name": "one-evaluation",
-    "entry": "evaluate",
-    "nodes": {
-      "evaluate": {
-        "op": "evaluate",
-        "state": {"$ref": "/input"},
-        "questions": {
-          "red": {"type": "noul", "instructions": "商品は赤色だと記載されていますか？"}
-        },
-        "save": "judgments",
-        "next": "finish"
-      },
-      "finish": {"op": "finish", "output": {"$ref": "/vars/judgments"}}
-    }
-  },
-  "input": "赤いマグカップ"
-}
-```
+## Storage and keys
 
-実ツールのvalidate(plan,input)を呼び、初回の無通信検査ではcreate(plan,input,live=false)→run(job_id)を使う。dry_run_pausedは成功した判定ではない。実APIへの許可がある場合だけ、新しくlive=trueのジョブを作る。既存dry-runを勝手に本番へ変えない。
-createのIDは `job.id`。runは `job` を返す。`completed`を確認して `job.output` を読み、必要ならget(include_state=true)を使う。handoff/failed等を正常完了としない。外側の `ok:true` だけで判断しない。
+`JEV_BRIDGE_HOME` selects storage explicitly. Fresh defaults are local application
+data on Windows, `~/Library/Application Support/jev-bridge` on macOS, and
+`$XDG_STATE_HOME/jev-bridge` (fallback `~/.local/state/jev-bridge`) on Linux.
+No Codex installation is required. Explicit legacy `JEV_SKILL_HOME`,
+`JEV_WORKER_HOME`, `JEV_HELPER_HOME` and `CODEX_HOME` still work; an existing old
+store can be reused without copying its key or resetting its ledger.
 
-このスキルはMCP登録・独立プロファイル・モデル一覧の追加を行わない。前のWorkerのインストールも、このスキルには必須ではない。
+`TYPESAFE_API_KEY` works in the process environment on all supported operating systems.
+`set-key` uses Windows DPAPI or, with the `[keyring]` extra, a native macOS Keychain,
+Linux Secret Service/KWallet or Windows credential vault. A headless machine without
+a usable vault should use its secret manager/environment. Plaintext fallback is refused.
+Saved credentials take precedence over environment values; broken storage is reported,
+not silently replaced by another account. Key-entry UI/OS vaults require local testing.
 
-## デスクトップでの呼び出し
-
-名前を含めて「Jevスキルを使って」と頼む方法を基本にする。ホストにより、ChatGPT側の選択は@、Codex CLI/IDEは$や/skills。UIの呼び出し文字を全環境で同じと断言しない。表示されない場合はスキルのパス・フロントマター・実アプリの探索先を確かめる。必要ならアプリを再起動する。
-
-公式： https://learn.chatgpt.com/docs/build-skills
-
-TypeSafe自身も開発者向けのエージェントスキルを公開している。本パッケージはその複製ではなく、今回の「利用者にプログラムを書かせずに実行する」ための独立した日本語ワークフロー。
-公式の案内： https://docs.typesafe.ai/agent-skill
+Local `settings.json` controls limits. `max_batch_items` is no longer capped at 20
+by the loader. Daily caps and `max_batch_seconds` may be set to 0 to disable those
+local limits; do so only after reviewing the scope. Limits are not monetary ceilings.
+`trust_environment=true` opts into configured HTTP proxies; verified TLS remains on.
