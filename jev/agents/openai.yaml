@@ -1,0 +1,6 @@
+interface:
+  display_name: "Jev：日本語で判定"
+  short_description: "日本語の依頼をJevの質問に変換し、実行して結果を日本語で返す"
+  default_prompt: "Jevスキルを使って、私の依頼を実行してください。入力の構造化や操作は任せます。まず接続状況を確かめ、必要な確認だけ日本語で聞いてください。"
+policy:
+  allow_implicit_invocation: true

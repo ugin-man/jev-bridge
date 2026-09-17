@@ -1,0 +1,5 @@
+This package is generated source code supplied for the user's use and modification.
+It is an unofficial integration and is not endorsed by OpenAI or TypeSafe.
+No third-party model weights or proprietary desktop binaries are included.
+Review permissions and service terms before enabling live requests.
+No warranty of model accuracy, API availability, or desktop compatibility is made.
